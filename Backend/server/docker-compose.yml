@@ -12,7 +12,7 @@ services:
 
   api:
     build:
-      context: ../Backend
+      context: ..
       dockerfile: Dockerfile
     ports:
       - "8000:8000"
