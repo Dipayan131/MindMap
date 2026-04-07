@@ -12,10 +12,12 @@ logger = get_logger(__name__)
 
 
 def _stub_final(state: AgentKVState) -> str:
-    chunks = [state.lingo_style or state.suggestion or state.message]
-    if state.follow_up:
-        chunks.append(state.follow_up)
-    return "\n\n".join(c for c in chunks if c)
+    base = (state.lingo_style or state.suggestion or state.message).strip()
+    fu = (state.follow_up or "").strip()
+    # Lingo stub passes draft that already embeds "Follow-up to ask: …" — avoid asking twice.
+    if fu and fu not in base:
+        return f"{base}\n\n{fu}" if base else fu
+    return base or fu
 
 
 async def run(state: AgentKVState, deps: AgentDeps) -> dict[str, str]:

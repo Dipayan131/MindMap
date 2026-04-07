@@ -13,12 +13,7 @@ logger = get_logger(__name__)
 
 
 def _draft_from_state(state: AgentKVState) -> str:
-    parts = [
-        state.insight,
-        state.suggestion,
-    ]
-    if state.follow_up:
-        parts.append(f"Follow-up to ask: {state.follow_up}")
+    parts = [state.insight, state.suggestion]
     return "\n\n".join(p for p in parts if p)
 
 
@@ -31,6 +26,7 @@ async def run(state: AgentKVState, deps: AgentDeps) -> dict[str, str]:
     user_block = json.dumps(
         {
             "draft_reply": draft,
+            "optional_follow_up": state.follow_up or "",
             "milvus_hits": milvus_hits,
             "traits": state.traits,
         },

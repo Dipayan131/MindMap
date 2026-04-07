@@ -13,13 +13,21 @@ logger = get_logger(__name__)
 
 
 def _stub(state: AgentKVState) -> dict[str, str]:
+    snippet = (state.message or "").strip()
+    if len(snippet) > 280:
+        snippet = snippet[:277] + "…"
+    ack = (
+        f"You shared: \"{snippet}\" — thanks for saying it out loud."
+        if snippet
+        else "Thanks for reaching out."
+    )
     return {
-        "insight": "Sounds like a lot is weighing on you — that is valid, especially during busy terms.",
+        "insight": f"{ack} That kind of load is rough, especially during busy terms.",
         "suggestion": (
             "Try a 10-minute walk on campus, one small task broken into a 5-minute step, "
             "and reach out to one person you trust. If you feel unsafe, contact local emergency services."
         ),
-        "follow_up": "What part of the day feels hardest lately — mornings, classes, or nights?",
+        "follow_up": "What would help most right now — a tiny first step on the backlog, or protecting sleep tonight?",
     }
 
 

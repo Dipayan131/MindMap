@@ -2,7 +2,8 @@
 
 Monorepo layout (same idea as `main`):
 
-- **`frontend/`** — Next.js app (from `main`).
+- **`frontend/`** — Next.js chat UI (port **3000**).
+- **`auth-frontend/`** — separate Next.js **email + password** login/register UI (port **3001**); wire `NEXT_PUBLIC_AUTH_API_BASE_URL` to your friend’s auth API when ready.
 - **`backend/`** — FastAPI multi-agent API, Milvus + optional Langflow, plus **`backend/server/`** (Docker Compose, nginx example, deployment notes).
 - **`docs/`** — backend architecture notes.
 
@@ -20,6 +21,17 @@ Open [http://localhost:3000](http://localhost:3000). The UI calls the FastAPI ba
 **CORS:** backend allows `http://localhost:3000` and `http://127.0.0.1:3000` by default. Override with `CORS_ORIGINS` in the backend `.env` (comma-separated).
 
 See `frontend/README.md` for details.
+
+## Auth frontend (login / register)
+
+```bash
+cd auth-frontend
+cp .env.example .env.local
+npm install
+npm run dev
+```
+
+Open **http://localhost:3001**. See `auth-frontend/README.md` for the HTTP contract (`POST /auth/login`, `POST /auth/register`).
 
 ## Backend
 
