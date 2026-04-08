@@ -9,6 +9,10 @@ import {
   type ChatResponseBody,
 } from "@/lib/api";
 
+import { useAuth } from "@/context/AuthContext";
+import { auth } from "@/lib/firebase";
+import { signOut } from "firebase/auth";
+
 const TONES = ["friendly", "strict", "funny", "direct"] as const;
 
 type Tone = (typeof TONES)[number];
@@ -28,6 +32,7 @@ function loadOrCreateUserId(): string {
 }
 
 export default function ChatApp() {
+  const { user } = useAuth();
   const [userId, setUserId] = useState("");
   const [tone, setTone] = useState<Tone>("friendly");
   const [academicLoad, setAcademicLoad] = useState("");
@@ -40,8 +45,12 @@ export default function ChatApp() {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    setUserId(loadOrCreateUserId());
-  }, []);
+    if (user?.uid) {
+      setUserId(user.uid);
+    } else {
+      setUserId(loadOrCreateUserId());
+    }
+  }, [user]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -109,25 +118,35 @@ export default function ChatApp() {
 
   return (
     <div className="mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col gap-4 px-4 py-6 sm:px-6">
-      <header className="shrink-0 space-y-1 border-b border-zinc-200 pb-4 dark:border-zinc-800">
-        <h1 className="text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-          MindMap
-        </h1>
-        <p className="text-sm text-zinc-600 dark:text-zinc-400">
-          Mental health chat — IIT KGP. API:{" "}
-          <code className="rounded bg-zinc-100 px-1.5 py-0.5 text-xs dark:bg-zinc-900">
-            {getApiBaseUrl()}
-          </code>
-        </p>
-        {backendOk === false && (
-          <p className="text-sm text-amber-700 dark:text-amber-400">
-            Cannot reach the backend at {getApiBaseUrl()}. Run{" "}
-            <code className="rounded bg-zinc-100 px-1 dark:bg-zinc-900">
-              uvicorn app.main:app --reload
-            </code>{" "}
-            from the <code className="rounded bg-zinc-100 px-1 dark:bg-zinc-900">backend</code>{" "}
-            folder.
+      <header className="shrink-0 space-y-1 border-b border-zinc-200 pb-4 dark:border-zinc-800 flex justify-between items-start">
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+            MindMap
+          </h1>
+          <p className="text-sm text-zinc-600 dark:text-zinc-400">
+            Mental health chat — IIT KGP. API:{" "}
+            <code className="rounded bg-zinc-100 px-1.5 py-0.5 text-xs dark:bg-zinc-900">
+              {getApiBaseUrl()}
+            </code>
           </p>
+          {backendOk === false && (
+            <p className="text-sm text-amber-700 dark:text-amber-400 mt-1">
+              Cannot reach the backend at {getApiBaseUrl()}. Run{" "}
+              <code className="rounded bg-zinc-100 px-1 dark:bg-zinc-900">
+                uvicorn app.main:app --reload
+              </code>{" "}
+              from the <code className="rounded bg-zinc-100 px-1 dark:bg-zinc-900">backend</code>{" "}
+              folder.
+            </p>
+          )}
+        </div>
+        {user && (
+          <button
+            onClick={() => signOut(auth)}
+            className="text-sm font-medium text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+          >
+            Sign out
+          </button>
         )}
       </header>
 
