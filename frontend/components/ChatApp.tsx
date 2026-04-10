@@ -4,9 +4,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   getApiBaseUrl,
   getHealth,
+  getQuestionnaireTemplate,
+  getUserProfile,
   postChat,
   saveQuestionnaire,
   type ChatResponseBody,
+  type QuestionnaireRow,
 } from "@/lib/api";
 
 import { useAuth } from "@/context/AuthContext";
@@ -31,12 +34,29 @@ function loadOrCreateUserId(): string {
   return id;
 }
 
+function isTone(s: string): s is Tone {
+  return (TONES as readonly string[]).includes(s);
+}
+
+function apiDisplayLabel(): string {
+  const base = getApiBaseUrl();
+  if (base) return base;
+  if (typeof window !== "undefined") {
+    return `${window.location.origin} → FastAPI (Next.js proxy; set BACKEND_URL in frontend env)`;
+  }
+  return "same-origin proxy";
+}
+
 export default function ChatApp() {
   const { user } = useAuth();
   const [userId, setUserId] = useState("");
   const [tone, setTone] = useState<Tone>("friendly");
   const [academicLoad, setAcademicLoad] = useState("");
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [questions, setQuestions] = useState<QuestionnaireRow[]>([]);
+  const [questionsError, setQuestionsError] = useState<string | null>(null);
   const [profileSaved, setProfileSaved] = useState(false);
+  const [profileLoaded, setProfileLoaded] = useState(false);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -47,6 +67,7 @@ export default function ChatApp() {
   useEffect(() => {
     if (user?.uid) {
       setUserId(user.uid);
+      localStorage.setItem(USER_ID_KEY, user.uid);
     } else {
       setUserId(loadOrCreateUserId());
     }
@@ -71,13 +92,65 @@ export default function ChatApp() {
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { questions: rows } = await getQuestionnaireTemplate();
+        if (!cancelled) {
+          setQuestions(rows);
+          setQuestionsError(null);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setQuestions([]);
+          setQuestionsError(
+            e instanceof Error ? e.message : "Could not load questionnaire template",
+          );
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!userId.trim()) return;
+    let cancelled = false;
+    setProfileLoaded(false);
+    (async () => {
+      try {
+        const p = await getUserProfile(userId.trim());
+        if (cancelled) return;
+        setAcademicLoad(
+          typeof p.academic_load === "string" ? p.academic_load : "",
+        );
+        const t = p.traits?.tone;
+        if (typeof t === "string" && isTone(t)) setTone(t);
+        const next: Record<string, string> = {};
+        for (const [k, v] of Object.entries(p.questionnaire)) {
+          next[k] = v == null ? "" : String(v);
+        }
+        setAnswers(next);
+      } catch {
+        /* 404 or offline — new user */
+      } finally {
+        if (!cancelled) setProfileLoaded(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+
   const persistProfile = useCallback(async () => {
     if (!userId.trim()) return;
     setError(null);
     try {
       await saveQuestionnaire({
         user_id: userId.trim(),
-        answers: {},
+        answers,
         academic_load: academicLoad.trim() || null,
         traits: { tone },
       });
@@ -86,7 +159,7 @@ export default function ChatApp() {
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save profile");
     }
-  }, [userId, academicLoad, tone]);
+  }, [userId, academicLoad, tone, answers]);
 
   const send = async () => {
     const text = input.trim();
@@ -108,7 +181,7 @@ export default function ChatApp() {
         ...m,
         {
           role: "assistant",
-          text: "Something went wrong talking to the server. Is the API running?",
+          text: "Something went wrong talking to the server. Is the API running on port 8000?",
         },
       ]);
     } finally {
@@ -118,7 +191,7 @@ export default function ChatApp() {
 
   return (
     <div className="mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col gap-4 px-4 py-6 sm:px-6">
-      <header className="shrink-0 space-y-1 border-b border-zinc-200 pb-4 dark:border-zinc-800 flex justify-between items-start">
+      <header className="flex shrink-0 items-start justify-between space-y-1 border-b border-zinc-200 pb-4 dark:border-zinc-800">
         <div>
           <h1 className="text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
             MindMap
@@ -126,22 +199,25 @@ export default function ChatApp() {
           <p className="text-sm text-zinc-600 dark:text-zinc-400">
             Mental health chat — IIT KGP. API:{" "}
             <code className="rounded bg-zinc-100 px-1.5 py-0.5 text-xs dark:bg-zinc-900">
-              {getApiBaseUrl()}
+              {apiDisplayLabel()}
             </code>
           </p>
           {backendOk === false && (
-            <p className="text-sm text-amber-700 dark:text-amber-400 mt-1">
-              Cannot reach the backend at {getApiBaseUrl()}. Run{" "}
+            <p className="mt-1 text-sm text-amber-700 dark:text-amber-400">
+              Cannot reach the backend. From the{" "}
+              <code className="rounded bg-zinc-100 px-1 dark:bg-zinc-900">backend</code> folder run{" "}
               <code className="rounded bg-zinc-100 px-1 dark:bg-zinc-900">
-                uvicorn app.main:app --reload
-              </code>{" "}
-              from the <code className="rounded bg-zinc-100 px-1 dark:bg-zinc-900">backend</code>{" "}
-              folder.
+                uvicorn app:app --reload --host 0.0.0.0 --port 8000
+              </code>
+              . If the frontend uses the Next.js proxy, set{" "}
+              <code className="rounded bg-zinc-100 px-1 dark:bg-zinc-900">BACKEND_URL</code> in{" "}
+              <code className="rounded bg-zinc-100 px-1 dark:bg-zinc-900">frontend/.env.local</code>.
             </p>
           )}
         </div>
         {user && (
           <button
+            type="button"
             onClick={() => signOut(auth)}
             className="text-sm font-medium text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
           >
@@ -150,13 +226,15 @@ export default function ChatApp() {
         )}
       </header>
 
-      <section className="shrink-0 space-y-3 rounded-xl border border-zinc-200 bg-zinc-50/80 p-4 dark:border-zinc-800 dark:bg-zinc-900/40">
+      <section className="shrink-0 space-y-4 rounded-xl border border-zinc-200 bg-zinc-50/80 p-4 dark:border-zinc-800 dark:bg-zinc-900/40">
         <div className="flex flex-wrap items-end gap-3">
           <label className="flex min-w-[12rem] flex-1 flex-col gap-1 text-xs font-medium text-zinc-600 dark:text-zinc-400">
             User ID
             <input
               className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
               value={userId}
+              readOnly={!!user?.uid}
+              title={user?.uid ? "Using your Firebase account id" : "Edit or use generated id"}
               onChange={(e) => {
                 setUserId(e.target.value);
                 localStorage.setItem(USER_ID_KEY, e.target.value);
@@ -179,7 +257,7 @@ export default function ChatApp() {
           </label>
         </div>
         <label className="flex flex-col gap-1 text-xs font-medium text-zinc-600 dark:text-zinc-400">
-          Academic load (optional, saved with profile)
+          Academic load (optional)
           <input
             className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
             placeholder="e.g. 6th sem, dual, thesis"
@@ -187,13 +265,52 @@ export default function ChatApp() {
             onChange={(e) => setAcademicLoad(e.target.value)}
           />
         </label>
-        <button
-          type="button"
-          onClick={() => void persistProfile()}
-          className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
-        >
-          {profileSaved ? "Saved" : "Save profile"}
-        </button>
+
+        {questionsError && (
+          <p className="text-xs text-amber-700 dark:text-amber-400">{questionsError}</p>
+        )}
+
+        {questions.length > 0 && (
+          <div className="space-y-3">
+            <p className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+              Questionnaire (saved with your profile; used by the chat pipeline)
+            </p>
+            {questions.map((row) => (
+              <label
+                key={row.id}
+                className="flex flex-col gap-1 text-xs font-medium text-zinc-600 dark:text-zinc-400"
+              >
+                <span className="flex flex-wrap items-center gap-2">
+                  {row.question}
+                  <span className="rounded bg-zinc-200 px-1.5 py-0.5 text-[10px] font-normal uppercase tracking-wide text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
+                    {row.category}
+                  </span>
+                </span>
+                <textarea
+                  className="min-h-[4rem] rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-normal text-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+                  placeholder="Your answer…"
+                  value={answers[row.id] ?? ""}
+                  onChange={(e) =>
+                    setAnswers((prev) => ({ ...prev, [row.id]: e.target.value }))
+                  }
+                />
+              </label>
+            ))}
+          </div>
+        )}
+
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => void persistProfile()}
+            className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+          >
+            {profileSaved ? "Saved" : "Save profile"}
+          </button>
+          {userId.trim() && !profileLoaded && (
+            <span className="text-xs text-zinc-500">Loading saved profile…</span>
+          )}
+        </div>
       </section>
 
       {error && (
@@ -206,7 +323,8 @@ export default function ChatApp() {
         <div className="flex-1 space-y-3 overflow-y-auto p-4">
           {messages.length === 0 && (
             <p className="text-center text-sm text-zinc-500 dark:text-zinc-400">
-              Say hi — the assistant uses your tone and saved profile.
+              Say hi — the assistant uses your tone, questionnaire answers, and academic load from the
+              backend.
             </p>
           )}
           {messages.map((m, i) => (

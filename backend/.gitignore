@@ -3,3 +3,9 @@ __pycache__/
 *.pyc
 .env
 .DS_Store
+database/user_data.json
+rag/data/*.faiss
+rag/data/kgp_texts.json
+rag/faiss_index/*
+!rag/faiss_index/.gitkeep
+.env*

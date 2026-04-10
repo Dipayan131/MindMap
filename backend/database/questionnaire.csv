@@ -1,0 +1,6 @@
+id,question,category
+q1,How would you describe your current academic load this semester?,academic
+q2,"Which areas feel most stressful right now? (academics, social, health, finances)",wellbeing
+q3,How many hours of sleep are you averaging on most nights?,lifestyle
+q4,"How connected do you feel to campus life (clubs, halls, sports)?",campus
+q5,Anything else you want your assistant to know about your context?,open
