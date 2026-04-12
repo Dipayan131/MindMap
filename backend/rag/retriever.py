@@ -4,7 +4,7 @@ import asyncio
 
 from langchain_community.vectorstores import FAISS
 from langchain_core.documents import Document
-from langchain_openai import OpenAIEmbeddings
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
 from core.config import Settings, get_settings
 from core.utils import get_logger
@@ -15,13 +15,11 @@ _vectorstore: FAISS | None = None
 _vectorstore_loaded: bool = False
 
 
-def _embeddings_from_settings(settings: Settings) -> OpenAIEmbeddings:
+def _embeddings_from_settings(settings: Settings) -> GoogleGenerativeAIEmbeddings:
     kwargs: dict = {"model": settings.embedding_model}
-    if settings.openai_api_key:
-        kwargs["api_key"] = settings.openai_api_key
-    if settings.openai_base_url:
-        kwargs["base_url"] = settings.openai_base_url
-    return OpenAIEmbeddings(**kwargs)
+    if settings.gemini_api_key:
+        kwargs["google_api_key"] = settings.gemini_api_key
+    return GoogleGenerativeAIEmbeddings(**kwargs)
 
 
 def load_vectorstore(settings: Settings | None = None) -> FAISS | None:
@@ -45,8 +43,8 @@ def load_vectorstore(settings: Settings | None = None) -> FAISS | None:
         _vectorstore_loaded = True
         return None
 
-    if not settings.openai_api_key:
-        logger.warning("OPENAI_API_KEY missing; cannot load embeddings for RAG retrieval")
+    if not settings.gemini_api_key:
+        logger.warning("GEMINI_API_KEY missing; cannot load embeddings for RAG retrieval")
         _vectorstore = None
         _vectorstore_loaded = True
         return None

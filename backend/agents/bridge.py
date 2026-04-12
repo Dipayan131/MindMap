@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from openai import OpenAIError
-
 from core.deps import AgentDeps
 from core.utils import get_logger
 
@@ -32,13 +30,10 @@ async def invoke_model(
         if plain_text_output:
             return await deps.llm.chat_text(system=system, user=user)
         return await deps.llm.chat_json_pref(system=system, user=user)
-    except OpenAIError as exc:
+    except Exception as exc:
         logger.warning(
-            "OpenAI unavailable (%s): %s — using agent stub/fallback",
+            "Gemini unavailable (%s): %s — using agent stub/fallback",
             type(exc).__name__,
             exc,
         )
-        return None
-    except RuntimeError as exc:
-        logger.warning("LLM runtime error: %s — using agent stub/fallback", exc)
         return None

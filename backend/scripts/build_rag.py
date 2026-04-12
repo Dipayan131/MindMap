@@ -5,7 +5,7 @@ One-time RAG ingestion: database/questionnaire.csv + database/output.json → FA
 Run from backend:
   cd backend && python scripts/build_rag.py
 
-Requires OPENAI_API_KEY (and optional OPENAI_BASE_URL in .env).
+Requires GEMINI_API_KEY in .env.
 
 Optional env (reduce rate-limit bursts):
   RAG_INGEST_BATCH_SIZE=16   # docs per embedding API call
@@ -22,8 +22,7 @@ from pathlib import Path
 import pandas as pd
 from langchain_community.vectorstores import FAISS
 from langchain_core.documents import Document
-from langchain_openai import OpenAIEmbeddings
-from openai import RateLimitError
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
 BACKEND_ROOT = Path(__file__).resolve().parent.parent
 if str(BACKEND_ROOT) not in sys.path:
@@ -88,7 +87,7 @@ Usage: Commonly used by students in casual conversation
 
 def _faiss_from_documents_batched(
     documents: list[Document],
-    embeddings: OpenAIEmbeddings,
+    embeddings: GoogleGenerativeAIEmbeddings,
 ) -> FAISS:
     """Embed in smaller batches to avoid huge single requests (helps with rate limits)."""
     batch_size = max(1, int(os.environ.get("RAG_INGEST_BATCH_SIZE", "16")))
@@ -114,9 +113,9 @@ def _faiss_from_documents_batched(
 
 def build_faiss() -> None:
     settings = get_settings()
-    if not settings.openai_api_key:
+    if not settings.gemini_api_key:
         raise SystemExit(
-            "OPENAI_API_KEY is required. Set it in the environment or backend/.env",
+            "GEMINI_API_KEY is required. Set it in the environment or backend/.env",
         )
 
     print("Loading questionnaire…")
@@ -129,32 +128,24 @@ def build_faiss() -> None:
     print(f"Total documents: {len(all_docs)} (questionnaire={len(q_docs)}, lingo={len(lingo_docs)})")
 
     kwargs: dict = {"model": settings.embedding_model}
-    if settings.openai_api_key:
-        kwargs["api_key"] = settings.openai_api_key
-    if settings.openai_base_url:
-        kwargs["base_url"] = settings.openai_base_url
-    embeddings = OpenAIEmbeddings(**kwargs)
+    if settings.gemini_api_key:
+        kwargs["google_api_key"] = settings.gemini_api_key
+    embeddings = GoogleGenerativeAIEmbeddings(**kwargs)
 
     print("Building FAISS index…")
     try:
         db = _faiss_from_documents_batched(all_docs, embeddings)
-    except RateLimitError as e:
+    except Exception as e:
         msg = str(e).lower()
-        print("\nOpenAI rejected the request (429).", file=sys.stderr)
-        if "insufficient_quota" in msg or "exceeded your current quota" in msg:
-            print(
-                "\n  Cause: no usable billing/quota on this API key.\n"
-                "  Fix: add payment method or credit at https://platform.openai.com/account/billing\n"
-                "        then run: python scripts/build_rag.py\n",
-                file=sys.stderr,
-            )
-        else:
+        if "429" in msg or "quota" in msg:
+            print("\nGoogle Gemini API rejected the request (Quota / Rate Limit).", file=sys.stderr)
             print(
                 "\n  If this is a rate limit, wait a few minutes or run with:\n"
                 "    RAG_INGEST_BATCH_SIZE=8 RAG_INGEST_SLEEP_SEC=1 python scripts/build_rag.py\n",
                 file=sys.stderr,
             )
-        raise SystemExit(1) from e
+            raise SystemExit(1) from e
+        raise e
 
     FAISS_DIR.mkdir(parents=True, exist_ok=True)
     print(f"Saving index to {FAISS_DIR}…")

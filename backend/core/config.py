@@ -16,10 +16,9 @@ class Settings(BaseSettings):
     app_name: str = "MindMap Mental Health API"
     debug: bool = False
 
-    openai_api_key: str | None = None
-    openai_base_url: str | None = None
-    llm_model: str = "gpt-4o-mini"
-    embedding_model: str = "text-embedding-3-small"
+    gemini_api_key: str | None = None
+    llm_model: str = "gemini-2.5-flash"
+    embedding_model: str = "text-embedding-004"
 
     langflow_base_url: str | None = None
     langflow_api_key: str | None = None
